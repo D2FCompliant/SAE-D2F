@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-09-23
+
+### Fixed
+
+- The operator login card is hidden after successful authentication and returns only after logout.
+
+Support: D2F-20260923-961248.
+Rollback: 0.3.0 / 3303846562c4a68f5c2334846959d98dfb9b68f2.
+
 ## 0.3.0 — 2026-09-23
 
 ### Added

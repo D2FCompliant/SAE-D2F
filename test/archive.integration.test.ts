@@ -80,7 +80,7 @@ describe("D2F compatibility contract", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "ok",
-      version: "0.3.0",
+      version: "0.3.1",
       commit: "development",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
@@ -214,6 +214,8 @@ describe("D2F operator control plane", () => {
     const body = await admin.text();
     expect(body).toContain("Administrer le SAE");
     expect(body).toContain('href="/console"');
+    const styles = await (await request("/admin/styles.css")).text();
+    expect(styles).toContain("[hidden]{display:none!important}");
     const console = await (await request("/console")).text();
     expect(console).toContain('href="/admin"');
   });

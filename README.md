@@ -2,7 +2,7 @@
 
 D2F Evidence Archive is an independent Electronic Archiving System designed for evidential preservation. It is not embedded in D2F Gestion or D2F Enterprise Platform, uses no shared database, and makes no certification or automatic legal-proof claim.
 
-Current release: `0.3.0` (client and D2F operator consoles, not qualified for evidential production).
+Current release: `0.3.1` (client and D2F operator consoles, not qualified for evidential production).
 
 ## Implemented foundation
 
