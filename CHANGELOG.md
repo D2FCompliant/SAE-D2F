@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 — 2026-09-23
+
+### Added
+
+- Separate D2F operator console at `/admin`, linked to the tenant archive console and Enterprise Platform.
+- Tenant and legal-entity onboarding with an automatic 120-month retention policy.
+- Quote/trial subscription assignment without hard-coded commercial pricing.
+- Cryptographically generated tenant credentials displayed once and stored only as SHA-256 hashes.
+- Operator-only tenant suspension and credential lifecycle APIs.
+
+Support: D2F-20260923-961248.
+Production: not deployed.
+
 ## 0.2.0 — 2026-09-23
 
 ### Added

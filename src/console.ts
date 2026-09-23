@@ -23,6 +23,8 @@ const html = `<!doctype html>
       </a>
       <nav aria-label="Navigation principale">
         <button class="nav-item active" data-view="archives"><span>▦</span> Documents</button>
+        <a class="nav-item" href="/admin"><span>⚙</span> Administration D2F</a>
+        <a class="nav-item" href="https://gestion.d2fcompliant.org"><span>↗</span> Enterprise Platform</a>
       </nav>
       <div class="security-note"><strong>Isolation active</strong><span>Tenant et entité juridique imposés par le profil authentifié.</span></div>
     </aside>

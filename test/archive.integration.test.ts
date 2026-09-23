@@ -7,6 +7,7 @@ import { sha256 } from "../src/crypto";
 const DEMO_TOKEN = "d2f_test_demo_0123456789abcdefghijklmnopqrstuvwxyz";
 const OTHER_TOKEN = "d2f_test_other_0123456789abcdefghijklmnopqrstuvwxyz";
 const READ_ONLY_TOKEN = "d2f_test_readonly_0123456789abcdefghijklmnop";
+const OPERATOR_TOKEN = "d2f_sae_ops_test_0123456789abcdefghijklmnopqrstuvwxyz";
 const scopes = JSON.stringify([
   "archives:write", "archives:read", "evidence:read", "evidence:verify",
   "archives:legal-hold", "archives:destruction-request", "archives:export", "jobs:read",
@@ -38,6 +39,13 @@ async function seedDemoTenant() {
        120, 'D2F minimum accounting and invoicing retention policy', 'active', ?)`)
       .bind(createdAt),
   ]);
+}
+
+async function seedOperator() {
+  await env.DB.prepare(`INSERT INTO operator_credentials
+    (id, display_name, key_sha256, key_prefix, scopes_json, created_at)
+    VALUES ('operator-test', 'D2F Support', ?, 'd2f_sae_ops_test', ?, ?)`)
+    .bind(await sha256(OPERATOR_TOKEN), JSON.stringify(["tenants:read", "tenants:write", "credentials:write"]), new Date().toISOString()).run();
 }
 
 function request(path: string, init: RequestInit = {}) {
@@ -72,7 +80,7 @@ describe("D2F compatibility contract", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "ok",
-      version: "0.2.0",
+      version: "0.3.0",
       commit: "development",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
@@ -196,6 +204,56 @@ describe("document console and profiles", () => {
     await seedCredential("credential-readonly", READ_ONLY_TOKEN, "tenant-demo", "legal-second", JSON.stringify(["archives:read", "jobs:read"]));
     const denied = await request(`/api/v1/jobs/${job.jobId}`, { headers: { authorization: `Bearer ${READ_ONLY_TOKEN}` } });
     expect(denied.status).toBe(404);
+  });
+});
+
+describe("D2F operator control plane", () => {
+  it("serves separate client and operator consoles with navigation buttons", async () => {
+    const admin = await request("/admin");
+    expect(admin.status).toBe(200);
+    const body = await admin.text();
+    expect(body).toContain("Administrer le SAE");
+    expect(body).toContain('href="/console"');
+    const console = await (await request("/console")).text();
+    expect(console).toContain('href="/admin"');
+  });
+
+  it("provisions an isolated tenant, 120-month policy and quote subscription", async () => {
+    await seedOperator();
+    const response = await request("/api/v1/admin/tenants", {
+      method: "POST",
+      headers: { authorization: `Bearer ${OPERATOR_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ organisationName: "Client Test", legalName: "Client Test SAS", country: "FR", planCode: "d2f-sae-quote" }),
+    });
+    expect(response.status).toBe(201);
+    const created = await response.json<Record<string, string | number>>();
+    expect(created.retentionMonths).toBe(120);
+    expect(created.billingStatus).toBe("quote");
+    const policy = await env.DB.prepare("SELECT duration_months FROM retention_policies WHERE tenant_id = ?").bind(created.tenantId).first<{ duration_months: number }>();
+    expect(policy?.duration_months).toBe(120);
+  });
+
+  it("issues a one-time raw tenant credential and stores only its hash", async () => {
+    await seedOperator();
+    const created = await (await request("/api/v1/admin/tenants", {
+      method: "POST", headers: { authorization: `Bearer ${OPERATOR_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ organisationName: "Client Token", legalName: "Client Token d.o.o.", country: "RS" }),
+    })).json<Record<string, string>>();
+    const issued = await request(`/api/v1/admin/tenants/${created.tenantId}/credentials`, {
+      method: "POST", headers: { authorization: `Bearer ${OPERATOR_TOKEN}`, "content-type": "application/json" }, body: "{}",
+    });
+    expect(issued.status).toBe(201);
+    const credential = await issued.json<Record<string, string>>();
+    expect(credential.token).toMatch(/^d2f_sae_prd_/);
+    const stored = await env.DB.prepare("SELECT key_sha256 FROM api_credentials WHERE id = ?").bind(credential.id).first<{ key_sha256: string }>();
+    expect(stored?.key_sha256).toBe(await sha256(String(credential.token)));
+    expect(JSON.stringify(stored)).not.toContain(String(credential.token));
+  });
+
+  it("rejects client credentials on operator routes", async () => {
+    const response = await request("/api/v1/admin/tenants", { headers: { authorization: `Bearer ${DEMO_TOKEN}` } });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "INVALID_OPERATOR_CREDENTIAL" } });
   });
 });
 

@@ -7,7 +7,7 @@
   "workers_dev": true,
   "preview_urls": true,
   "vars": {
-    "APP_VERSION": "0.2.0",
+    "APP_VERSION": "0.3.0",
     "GIT_COMMIT": "development",
     "ENVIRONMENT": "local",
     "EVIDENCE_SCHEMA_VERSION": "1.0.0",
@@ -38,7 +38,7 @@
     "production": {
       "name": "d2f-evidence-archive-production",
       "vars": {
-        "APP_VERSION": "0.2.0",
+        "APP_VERSION": "0.3.0",
         "GIT_COMMIT": "development",
         "ENVIRONMENT": "production",
         "EVIDENCE_SCHEMA_VERSION": "1.0.0",
@@ -65,7 +65,7 @@
     "test": {
       "name": "d2f-evidence-archive-test",
       "vars": {
-        "APP_VERSION": "0.2.0",
+        "APP_VERSION": "0.3.0",
         "GIT_COMMIT": "development",
         "ENVIRONMENT": "test",
         "EVIDENCE_SCHEMA_VERSION": "1.0.0",

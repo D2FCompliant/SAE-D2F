@@ -1,9 +1,12 @@
 import { depositArchive, getArchive, getEvidence, getObject, listArchives, listObjects, verifyArchive } from "./archive-service";
+import { adminConsoleResponse } from "./admin-console";
 import { authenticate, describePrincipal } from "./auth";
 import { consoleResponse } from "./console";
 import { correlationId, errorResponse, json, parseDeposit, parseSmallJson, sourceIp } from "./http";
 import { applyLegalHold, getJob, releaseLegalHold, requestDestruction, requestExport } from "./lifecycle-service";
 import { OPENAPI } from "./openapi";
+import { authenticateOperator } from "./operator-auth";
+import { createManagedTenant, issueTenantCredential, listManagedTenants, revokeTenantCredential, setTenantStatus } from "./operator-service";
 
 function archiveMatch(pathname: string): { archiveId: string; suffix: string } | null {
   const match = /^(?:\/api\/v1)?\/archives\/([^/]+)(\/.*)?$/.exec(pathname);
@@ -21,6 +24,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   const requestCorrelationId = correlationId(request);
   const responseHeaders = { "x-correlation-id": requestCorrelationId };
   try {
+    const adminAsset = adminConsoleResponse(url.pathname);
+    if (request.method === "GET" && adminAsset) return adminAsset;
     const consoleAsset = consoleResponse(url.pathname);
     if (request.method === "GET" && consoleAsset) return consoleAsset;
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/v1/health")) {
@@ -36,6 +41,32 @@ async function route(request: Request, env: Env): Promise<Response> {
       }, 200, responseHeaders);
     }
     if (request.method === "GET" && url.pathname === "/api/v1/openapi.json") return json(OPENAPI, 200, responseHeaders);
+    if (request.method === "GET" && url.pathname === "/api/v1/admin/session") {
+      const operator = await authenticateOperator(request, env, "tenants:read");
+      return json({ displayName: operator.displayName, scopes: operator.scopes }, 200, responseHeaders);
+    }
+    if (request.method === "GET" && url.pathname === "/api/v1/admin/tenants") {
+      await authenticateOperator(request, env, "tenants:read");
+      return json({ items: await listManagedTenants(env) }, 200, responseHeaders);
+    }
+    if (request.method === "POST" && url.pathname === "/api/v1/admin/tenants") {
+      const operator = await authenticateOperator(request, env, "tenants:write");
+      return json(await createManagedTenant(env, operator, await parseSmallJson(request), requestCorrelationId, sourceIp(request)), 201, responseHeaders);
+    }
+    const tenantAdminMatch = /^\/api\/v1\/admin\/tenants\/([^/]+)\/(status|credentials)(?:\/([^/]+)\/revoke)?$/.exec(url.pathname);
+    if (tenantAdminMatch?.[1] && tenantAdminMatch[2] === "status" && request.method === "PATCH") {
+      const operator = await authenticateOperator(request, env, "tenants:write");
+      const body = await parseSmallJson(request);
+      return json(await setTenantStatus(env, operator, decodeURIComponent(tenantAdminMatch[1]), String(body.status ?? ""), requestCorrelationId, sourceIp(request)), 200, responseHeaders);
+    }
+    if (tenantAdminMatch?.[1] && tenantAdminMatch[2] === "credentials" && !tenantAdminMatch[3] && request.method === "POST") {
+      const operator = await authenticateOperator(request, env, "credentials:write");
+      return json(await issueTenantCredential(env, operator, decodeURIComponent(tenantAdminMatch[1]), await parseSmallJson(request), requestCorrelationId, sourceIp(request)), 201, responseHeaders);
+    }
+    if (tenantAdminMatch?.[1] && tenantAdminMatch[2] === "credentials" && tenantAdminMatch[3] && request.method === "POST") {
+      const operator = await authenticateOperator(request, env, "credentials:write");
+      return json(await revokeTenantCredential(env, operator, decodeURIComponent(tenantAdminMatch[1]), decodeURIComponent(tenantAdminMatch[3]), requestCorrelationId, sourceIp(request)), 200, responseHeaders);
+    }
     if (request.method === "GET" && url.pathname === "/api/v1/session") {
       const principal = await authenticate(request, env, "archives:read");
       return json(describePrincipal(principal), 200, responseHeaders);

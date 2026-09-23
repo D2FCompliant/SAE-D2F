@@ -2,7 +2,7 @@ export const OPENAPI = {
   openapi: "3.1.0",
   info: {
     title: "D2F Evidence Archive API",
-    version: "0.2.0",
+    version: "0.3.0",
     description: "Electronic Archiving System designed for evidential preservation. No certification claim is made.",
   },
   servers: [{ url: "/api/v1" }],
@@ -39,6 +39,14 @@ export const OPENAPI = {
       },
     },
     "/session": { get: { operationId: "getSession", responses: { "200": { description: "Authenticated profile and capabilities" } } } },
+    "/admin/session": { get: { operationId: "getOperatorSession", security: [{ operatorBearerAuth: [] }], responses: { "200": { description: "Authenticated D2F operator and scopes" } } } },
+    "/admin/tenants": {
+      get: { operationId: "listManagedTenants", security: [{ operatorBearerAuth: [] }], responses: { "200": { description: "D2F-managed SAE tenants, subscription and storage summary" } } },
+      post: { operationId: "createManagedTenant", security: [{ operatorBearerAuth: [] }], responses: { "201": { description: "Tenant, legal entity, 10-year policy and quote subscription created" } } },
+    },
+    "/admin/tenants/{tenantId}/status": { patch: { operationId: "setManagedTenantStatus", security: [{ operatorBearerAuth: [] }], parameters: [{ $ref: "#/components/parameters/TenantId" }], responses: { "200": { description: "Tenant suspended or reactivated" } } } },
+    "/admin/tenants/{tenantId}/credentials": { post: { operationId: "issueManagedTenantCredential", security: [{ operatorBearerAuth: [] }], parameters: [{ $ref: "#/components/parameters/TenantId" }], responses: { "201": { description: "Client credential returned once; only its SHA-256 digest is retained" } } } },
+    "/admin/tenants/{tenantId}/credentials/{credentialId}/revoke": { post: { operationId: "revokeManagedTenantCredential", security: [{ operatorBearerAuth: [] }], parameters: [{ $ref: "#/components/parameters/TenantId" }, { name: "credentialId", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "Client credential revoked" } } } },
     "/archives/{archiveId}": { get: { operationId: "getArchive", parameters: [{ $ref: "#/components/parameters/ArchiveId" }], responses: { "200": { description: "Archive metadata" }, "404": { description: "Not found" } } } },
     "/archives/{archiveId}/status": { get: { operationId: "getArchiveStatus", parameters: [{ $ref: "#/components/parameters/ArchiveId" }], responses: { "200": { description: "Archive status" } } } },
     "/archives/{archiveId}/metadata": { get: { operationId: "getArchiveMetadata", parameters: [{ $ref: "#/components/parameters/ArchiveId" }], responses: { "200": { description: "Archive metadata" } } } },
@@ -58,8 +66,12 @@ export const OPENAPI = {
     securitySchemes: {
       bearerAuth: { type: "http", scheme: "bearer" },
       apiKeyAuth: { type: "apiKey", in: "header", name: "x-api-key" },
+      operatorBearerAuth: { type: "http", scheme: "bearer", description: "Dedicated D2F operator credential; never a client archive credential." },
     },
-    parameters: { ArchiveId: { name: "archiveId", in: "path", required: true, schema: { type: "string", format: "uuid" } } },
+    parameters: {
+      ArchiveId: { name: "archiveId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      TenantId: { name: "tenantId", in: "path", required: true, schema: { type: "string" } },
+    },
     schemas: {
       Receipt: {
         type: "object",
