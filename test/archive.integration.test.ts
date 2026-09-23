@@ -80,7 +80,7 @@ describe("D2F compatibility contract", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "ok",
-      version: "0.3.1",
+      version: "0.3.2",
       commit: "development",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
@@ -216,6 +216,8 @@ describe("D2F operator control plane", () => {
     expect(body).toContain('href="/console"');
     const styles = await (await request("/admin/styles.css")).text();
     expect(styles).toContain("[hidden]{display:none!important}");
+    const script = await (await request("/admin/app.js")).text();
+    expect(script).toContain("const form=event.currentTarget");
     const console = await (await request("/console")).text();
     expect(console).toContain('href="/admin"');
   });
@@ -233,6 +235,14 @@ describe("D2F operator control plane", () => {
     expect(created.billingStatus).toBe("quote");
     const policy = await env.DB.prepare("SELECT duration_months FROM retention_policies WHERE tenant_id = ?").bind(created.tenantId).first<{ duration_months: number }>();
     expect(policy?.duration_months).toBe(120);
+    const replay = await request("/api/v1/admin/tenants", {
+      method: "POST",
+      headers: { authorization: `Bearer ${OPERATOR_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ organisationName: "Client Test", legalName: "Client Test SAS", country: "FR", planCode: "d2f-sae-quote" }),
+    });
+    expect(await replay.json()).toMatchObject({ tenantId: created.tenantId, existing: true });
+    const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM tenants WHERE organisation_name = 'Client Test'").first<{ count: number }>();
+    expect(count?.count).toBe(1);
   });
 
   it("issues a one-time raw tenant credential and stores only its hash", async () => {

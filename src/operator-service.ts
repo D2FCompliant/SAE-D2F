@@ -49,6 +49,20 @@ export async function createManagedTenant(env: Env, operator: OperatorPrincipal,
   const country = clean(input.country, 2).toUpperCase();
   const planCode = clean(input.planCode, 80) || "d2f-sae-quote";
   if (organisationName.length < 2 || legalName.length < 2 || !/^[A-Z]{2}$/.test(country)) throw new ApiError(400, "INVALID_TENANT", "Organisation, legal entity and ISO country are required.");
+  const existing = await env.DB.prepare(`SELECT t.id AS tenant_id, le.id AS legal_entity_id, rp.id AS policy_id,
+      rp.duration_months, s.billing_status
+    FROM tenants t
+    JOIN legal_entities le ON le.tenant_id = t.id
+    JOIN retention_policies rp ON rp.tenant_id = t.id AND rp.status = 'active'
+    LEFT JOIN tenant_subscriptions s ON s.tenant_id = t.id
+    WHERE lower(t.organisation_name) = lower(?) AND lower(le.legal_name) = lower(?) AND t.country = ?
+    ORDER BY t.created_at LIMIT 1`)
+    .bind(organisationName, legalName, country)
+    .first<{ tenant_id: string; legal_entity_id: string; policy_id: string; duration_months: number; billing_status: string | null }>();
+  if (existing) return {
+    tenantId: existing.tenant_id, legalEntityId: existing.legal_entity_id, policyId: existing.policy_id,
+    retentionMonths: existing.duration_months, billingStatus: existing.billing_status ?? "quote", existing: true,
+  };
   const tenantId = identifier("tenant");
   const legalEntityId = identifier("legal");
   const policyId = "d2f-minimum-10-years";

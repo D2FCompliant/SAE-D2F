@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2 — 2026-09-23
+
+### Fixed
+
+- Client creation retains the form reference across asynchronous requests instead of failing after persistence.
+- Repeated creation of the same organisation and legal entity is idempotent and no longer creates duplicate tenants.
+
+Support: D2F-20260923-961248.
+Rollback: 0.3.1 / bffd83748c376b569a5cde87993e893d4454f23b.
+
 ## 0.3.1 — 2026-09-23
 
 ### Fixed
