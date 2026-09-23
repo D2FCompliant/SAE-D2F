@@ -2,7 +2,7 @@ export const OPENAPI = {
   openapi: "3.1.0",
   info: {
     title: "D2F Evidence Archive API",
-    version: "0.3.3",
+    version: "0.3.4",
     description: "Electronic Archiving System designed for evidential preservation. No certification claim is made.",
   },
   servers: [{ url: "/api/v1" }],

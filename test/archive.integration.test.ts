@@ -80,7 +80,7 @@ describe("D2F compatibility contract", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "ok",
-      version: "0.3.3",
+      version: "0.3.4",
       commit: "development",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
@@ -214,9 +214,15 @@ describe("D2F operator control plane", () => {
     const body = await admin.text();
     expect(body).toContain("Administrer le SAE");
     expect(body).toContain('href="/console"');
-    const styles = await (await request("/admin/styles.css")).text();
+    expect(body).toContain('autocomplete="username"');
+    expect(body).toContain('autocomplete="current-password"');
+    const styleResponse = await request("/admin/styles.css");
+    expect(styleResponse.headers.get("cache-control")).toBe("no-store");
+    const styles = await styleResponse.text();
     expect(styles).toContain("[hidden]{display:none!important}");
-    const script = await (await request("/admin/app.js")).text();
+    const scriptResponse = await request("/admin/app.js");
+    expect(scriptResponse.headers.get("cache-control")).toBe("no-store");
+    const script = await scriptResponse.text();
     expect(script).toContain("const form=event.currentTarget");
     const console = await (await request("/console")).text();
     expect(console).toContain('href="/admin"');

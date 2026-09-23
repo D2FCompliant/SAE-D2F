@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 — 2026-09-23
+
+### Fixed
+
+- The operator login form exposes standards-based username/password autocomplete metadata for Safari Passwords and macOS Keychain.
+- Admin JavaScript and CSS are no longer cached, so logout and UI corrections take effect immediately.
+
+Support: D2F-20260923-961248.
+Rollback: 0.3.3 / 05f40ae1087e99e0e7c63917091196ab6c114489.
+
 ## 0.3.3 — 2026-09-23
 
 ### Fixed
