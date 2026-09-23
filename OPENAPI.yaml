@@ -1,0 +1,90 @@
+openapi: 3.1.0
+info:
+  title: D2F Evidence Archive API
+  version: 0.1.0
+  description: Electronic Archiving System designed for evidential preservation. No certification claim is made.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      responses:
+        '200': { description: Health and qualification posture }
+  /archives:
+    post:
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/pdf: { schema: { type: string, format: binary } }
+          application/xml: { schema: { type: string, format: binary } }
+          text/xml: { schema: { type: string, format: binary } }
+          application/json: { schema: { type: string, format: binary } }
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201': { description: Archive preserved }
+        '200': { description: Idempotent replay }
+        '409': { description: Idempotency conflict }
+  /archives/{archiveId}:
+    get:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Archive metadata }, '404': { description: Not found } }
+  /archives/{archiveId}/status:
+    get:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Status } }
+  /archives/{archiveId}/metadata:
+    get:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Metadata } }
+  /archives/{archiveId}/objects:
+    get:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Object list } }
+  /archives/{archiveId}/objects/{objectId}:
+    get:
+      parameters:
+        - { $ref: '#/components/parameters/ArchiveId' }
+        - { name: objectId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Archived object } }
+  /archives/{archiveId}/evidence:
+    get:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Evidence manifest metadata } }
+  /archives/{archiveId}/verify:
+    post:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Verification report } }
+  /archives/{archiveId}/legal-hold:
+    post:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '201': { description: Legal hold applied } }
+    delete:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '200': { description: Legal hold released } }
+  /archives/{archiveId}/destruction-request:
+    post:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '202': { description: Authorization workflow queued }, '409': { description: Retention or hold prevents destruction } }
+  /archives/{archiveId}/export:
+    post:
+      parameters: [{ $ref: '#/components/parameters/ArchiveId' }]
+      responses: { '202': { description: Export job queued } }
+  /jobs/{jobId}:
+    get:
+      parameters: [{ name: jobId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Job status }, '404': { description: Not found } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+    apiKeyAuth: { type: apiKey, in: header, name: x-api-key }
+  parameters:
+    ArchiveId: { name: archiveId, in: path, required: true, schema: { type: string, format: uuid } }

@@ -1,0 +1,63 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "d2f-evidence-archive",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": {
+    "APP_VERSION": "0.1.0",
+    "ENVIRONMENT": "local",
+    "EVIDENCE_SCHEMA_VERSION": "1.0.0",
+    "MAX_ARCHIVE_BYTES": "20971520",
+    "STORAGE_IMMUTABILITY": "application-only",
+    "TIMESTAMP_PROVIDER": "internal-dev"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "d2f-evidence-archive",
+      "database_id": "local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ARCHIVE_OBJECTS",
+      "bucket_name": "d2f-evidence-archive-local"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  },
+  "env": {
+    "test": {
+      "name": "d2f-evidence-archive-test",
+      "vars": {
+        "APP_VERSION": "0.1.0",
+        "ENVIRONMENT": "test",
+        "EVIDENCE_SCHEMA_VERSION": "1.0.0",
+        "MAX_ARCHIVE_BYTES": "20971520",
+        "STORAGE_IMMUTABILITY": "application-only",
+        "TIMESTAMP_PROVIDER": "internal-dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "d2f-evidence-archive-test",
+          "database_id": "test",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "ARCHIVE_OBJECTS",
+          "bucket_name": "d2f-evidence-archive-test"
+        }
+      ]
+    }
+  }
+}

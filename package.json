@@ -1,0 +1,30 @@
+{
+  "name": "@d2f/evidence-archive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Independent electronic archiving system designed for evidential preservation.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
+  "scripts": {
+    "build": "wrangler deploy --dry-run --env= --outdir dist",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "db:migrate:local": "wrangler d1 migrations apply d2f-evidence-archive --local",
+    "dev": "wrangler dev --local",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.2.3",
+    "@types/node": "22.20.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.136.3"
+  },
+  "overrides": {
+    "sharp": "0.35.4"
+  }
+}
