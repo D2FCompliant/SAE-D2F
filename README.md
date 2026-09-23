@@ -15,6 +15,7 @@ Current release: `0.2.0` (document console, not qualified for evidential product
 - Bearer and `x-api-key` authentication with hashed, revocable credentials;
 - idempotent deposit receipts;
 - integrity tests for altered, missing, and unchanged evidence.
+- tenant-scoped, versioned retention policies with a mandatory 120-month minimum and calendar-based expiry;
 - responsive document-management console at `/console` with server-enforced, scope-based profiles;
 - tenant/legal-entity isolated document search, download, evidence, verification, legal hold, export and controlled destruction request;
 - compatibility for the D2F Gestion connector paths `/archives/{id}/verify` and `/archives/{id}/evidence`.

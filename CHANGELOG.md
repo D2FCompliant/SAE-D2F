@@ -8,12 +8,15 @@
 - Scope-derived Consultation, Archiviste, Juridique & conformité, and Administrateur SAE profiles.
 - Paginated document register, filtering, authorized download, deposit, evidence, verification, legal hold, export and destruction-request actions.
 - D2F Gestion compatibility routes for the configurable unversioned verification and evidence paths.
+- Automatic application of a versioned tenant retention policy with a mandatory 120-month minimum.
+- EU R2 storage protected for all prefixes by a provider-enforced 3653-day bucket lock.
+- Production migrations no longer provision demonstration tenants or credentials.
 
 ### Security
 
 - Lifecycle job reads are now isolated by tenant and legal entity, matching archive access controls.
 
-Support: pending existing D2F Support case assignment.
+Support: D2F-20260923-961248.
 Production: not deployed.
 
 ## 0.1.0 — 2026-09-23

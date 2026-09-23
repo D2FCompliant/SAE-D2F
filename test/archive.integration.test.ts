@@ -20,6 +20,26 @@ async function seedCredential(id: string, token: string, tenantId = "tenant-demo
     .bind(id, tenantId, legalEntityId, await sha256(token), credentialScopes, new Date().toISOString()).run();
 }
 
+async function seedDemoTenant() {
+  const createdAt = "2026-09-23T00:00:00.000Z";
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO tenants
+      (id, organisation_name, country, data_residency, status, created_at)
+      VALUES ('tenant-demo', 'D2F Demo', 'FR', 'EU', 'active', ?)`)
+      .bind(createdAt),
+    env.DB.prepare(`INSERT INTO legal_entities
+      (id, tenant_id, legal_name, country, status, created_at)
+      VALUES ('legal-demo', 'tenant-demo', 'D2F Demo France', 'FR', 'active', ?)`)
+      .bind(createdAt),
+    env.DB.prepare(`INSERT INTO retention_policies
+      (id, tenant_id, version, jurisdiction, document_category, start_event,
+       duration_months, legal_basis, status, created_at)
+      VALUES ('d2f-default-10-years', 'tenant-demo', 1, 'EU', '*', 'deposit',
+       120, 'D2F minimum accounting and invoicing retention policy', 'active', ?)`)
+      .bind(createdAt),
+  ]);
+}
+
 function request(path: string, init: RequestInit = {}) {
   return worker.fetch(new Request(`https://archive.example.test${path}`, init), env);
 }
@@ -42,6 +62,7 @@ beforeEach(async () => {
   await reset();
   const testEnv = env as Env & { TEST_MIGRATIONS: D1Migration[] };
   await applyD1Migrations(env.DB, testEnv.TEST_MIGRATIONS);
+  await seedDemoTenant();
   await seedCredential("credential-demo", DEMO_TOKEN);
 });
 
@@ -52,6 +73,7 @@ describe("D2F compatibility contract", () => {
     expect(await response.json()).toMatchObject({
       status: "ok",
       version: "0.2.0",
+      commit: "development",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
     });
@@ -65,9 +87,30 @@ describe("D2F compatibility contract", () => {
     expect(receipt.status).toBe("preserved");
     expect(receipt.object_hash).toMatch(/^[a-f0-9]{64}$/);
     expect(receipt.manifest_hash).toMatch(/^[a-f0-9]{64}$/);
-    const archive = await env.DB.prepare("SELECT status, source_document_id, source_document_number FROM archives WHERE id = ?")
-      .bind(receipt.archive_id).first<Record<string, string>>();
-    expect(archive).toMatchObject({ status: "PRESERVED", source_document_id: "invoice-001", source_document_number: "F-2026-001" });
+    const archive = await env.DB.prepare(`SELECT status, source_document_id, source_document_number,
+        deposited_at, retention_policy_id, retention_policy_version, retention_expires_at
+      FROM archives WHERE id = ?`)
+      .bind(receipt.archive_id).first<{
+        status: string;
+        source_document_id: string;
+        source_document_number: string;
+        deposited_at: string;
+        retention_policy_id: string;
+        retention_policy_version: number;
+        retention_expires_at: string;
+      }>();
+    expect(archive).toMatchObject({
+      status: "PRESERVED",
+      source_document_id: "invoice-001",
+      source_document_number: "F-2026-001",
+      retention_policy_id: "d2f-default-10-years",
+      retention_policy_version: 1,
+    });
+    const deposited = new Date(archive!.deposited_at);
+    const expires = new Date(archive!.retention_expires_at);
+    expect(expires.getUTCFullYear()).toBe(deposited.getUTCFullYear() + 10);
+    expect(expires.getUTCMonth()).toBe(deposited.getUTCMonth());
+    expect(expires.getUTCDate()).toBe(deposited.getUTCDate());
   });
 
   it("replays the same compatibility deposit without creating a duplicate", async () => {
@@ -239,6 +282,22 @@ describe("formal v1 idempotency", () => {
 });
 
 describe("retention lifecycle", () => {
+  it("refuses a deposit when no active tenant retention policy exists", async () => {
+    await env.DB.prepare("UPDATE retention_policies SET status = 'retired' WHERE tenant_id = 'tenant-demo'").run();
+    const response = await deposit("%PDF without policy", { "x-d2f-document-id": "missing-policy" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "RETENTION_POLICY_NOT_FOUND" } });
+    const count = await env.DB.prepare("SELECT count(*) AS total FROM archives").first<{ total: number }>();
+    expect(count?.total).toBe(0);
+  });
+
+  it("refuses an active policy shorter than the D2F 120-month minimum", async () => {
+    await env.DB.prepare("UPDATE retention_policies SET duration_months = 119 WHERE tenant_id = 'tenant-demo'").run();
+    const response = await deposit("%PDF short policy", { "x-d2f-document-id": "short-policy" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "RETENTION_POLICY_TOO_SHORT" } });
+  });
+
   it("legal hold blocks destruction and release restores preservation", async () => {
     const created = await deposit();
     const receipt = await created.json<Record<string, string>>();

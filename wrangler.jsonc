@@ -8,6 +8,7 @@
   "preview_urls": true,
   "vars": {
     "APP_VERSION": "0.2.0",
+    "GIT_COMMIT": "development",
     "ENVIRONMENT": "local",
     "EVIDENCE_SCHEMA_VERSION": "1.0.0",
     "MAX_ARCHIVE_BYTES": "20971520",
@@ -34,10 +35,38 @@
     "traces": { "enabled": true, "head_sampling_rate": 0.1 }
   },
   "env": {
+    "production": {
+      "name": "d2f-evidence-archive-production",
+      "vars": {
+        "APP_VERSION": "0.2.0",
+        "GIT_COMMIT": "development",
+        "ENVIRONMENT": "production",
+        "EVIDENCE_SCHEMA_VERSION": "1.0.0",
+        "MAX_ARCHIVE_BYTES": "20971520",
+        "STORAGE_IMMUTABILITY": "retention-locked",
+        "TIMESTAMP_PROVIDER": "internal-dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "d2f-evidence-archive",
+          "database_id": "15c9b7f9-45af-49cc-8dd6-d2217730f943",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "ARCHIVE_OBJECTS",
+          "bucket_name": "d2f-evidence-archive-eu",
+          "jurisdiction": "eu"
+        }
+      ]
+    },
     "test": {
       "name": "d2f-evidence-archive-test",
       "vars": {
         "APP_VERSION": "0.2.0",
+        "GIT_COMMIT": "development",
         "ENVIRONMENT": "test",
         "EVIDENCE_SCHEMA_VERSION": "1.0.0",
         "MAX_ARCHIVE_BYTES": "20971520",

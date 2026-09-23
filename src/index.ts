@@ -28,6 +28,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         status: "ok",
         service: "D2F Evidence Archive",
         version: env.APP_VERSION,
+        commit: env.GIT_COMMIT,
         environment: env.ENVIRONMENT,
         evidenceSchemaVersion: env.EVIDENCE_SCHEMA_VERSION,
         storageImmutability: env.STORAGE_IMMUTABILITY,

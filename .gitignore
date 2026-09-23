@@ -8,6 +8,7 @@ coverage/
 dist/
 *.log
 .DS_Store
+._*
 git-metadata/
 git-metadata-icloud-backup/
 git-pointer-backup

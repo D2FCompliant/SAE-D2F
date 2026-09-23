@@ -17,6 +17,16 @@ type IdempotencyRow = {
   response_json: string | null;
 };
 
+type RetentionPolicyRow = {
+  id: string;
+  version: number;
+  jurisdiction: string;
+  document_category: string;
+  start_event: string;
+  duration_months: number;
+  legal_basis: string;
+};
+
 type ArchiveRow = {
   id: string;
   tenant_id: string;
@@ -59,6 +69,42 @@ function parseReceipt(value: string): Receipt {
   return parsed as Receipt;
 }
 
+function addCalendarMonths(value: string, months: number): string {
+  const source = new Date(value);
+  const targetMonth = source.getUTCMonth() + months;
+  const targetYear = source.getUTCFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(
+    targetYear,
+    normalizedMonth,
+    Math.min(source.getUTCDate(), lastDay),
+    source.getUTCHours(),
+    source.getUTCMinutes(),
+    source.getUTCSeconds(),
+    source.getUTCMilliseconds(),
+  )).toISOString();
+}
+
+async function resolveRetentionPolicy(env: Env, principal: Principal, documentType: string): Promise<RetentionPolicyRow> {
+  const policy = await env.DB.prepare(`SELECT id, version, jurisdiction, document_category,
+      start_event, duration_months, legal_basis
+    FROM retention_policies
+    WHERE tenant_id = ? AND status = 'active' AND (document_category = ? OR document_category = '*')
+    ORDER BY CASE WHEN document_category = ? THEN 0 ELSE 1 END, version DESC
+    LIMIT 1`)
+    .bind(principal.tenantId, documentType, documentType)
+    .first<RetentionPolicyRow>();
+  if (!policy) throw new ApiError(409, "RETENTION_POLICY_NOT_FOUND", "No active retention policy applies to this document.");
+  if (policy.start_event !== "deposit") {
+    throw new ApiError(409, "RETENTION_START_EVENT_UNSUPPORTED", "The configured retention start event is not supported by this release.");
+  }
+  if (!Number.isSafeInteger(policy.duration_months) || policy.duration_months < 120) {
+    throw new ApiError(409, "RETENTION_POLICY_TOO_SHORT", "The active retention policy must preserve the document for at least 120 months.");
+  }
+  return policy;
+}
+
 export async function depositArchive(env: Env, principal: Principal, input: DepositInput, sourceIp: string | null): Promise<{ receipt: Receipt; replayed: boolean }> {
   if (!ALLOWED_MIME_TYPES.has(input.mimeType)) throw new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "This media type is not accepted.");
   if (input.bytes.byteLength === 0) throw new ApiError(400, "EMPTY_ARCHIVE", "The deposited object is empty.");
@@ -87,6 +133,8 @@ export async function depositArchive(env: Env, principal: Principal, input: Depo
   const objectId = uuid();
   const manifestId = uuid();
   const depositedAt = new Date().toISOString();
+  const retentionPolicy = await resolveRetentionPolicy(env, principal, input.documentType);
+  const retentionExpiresAt = addCalendarMonths(depositedAt, retentionPolicy.duration_months);
   const originalKey = `${principal.tenantId}/${archiveId}/original/${objectId}`;
   const manifestKey = `${principal.tenantId}/${archiveId}/evidence/manifest.v1.json`;
   await env.DB.batch([
@@ -96,13 +144,15 @@ export async function depositArchive(env: Env, principal: Principal, input: Depo
       .bind(principal.tenantId, effectiveIdempotencyKey, requestHash, archiveId, depositedAt, depositedAt),
     env.DB.prepare(`INSERT INTO archives
       (id, tenant_id, legal_entity_id, source_system, source_document_id, source_document_number,
-       document_type, mime_type, original_filename, deposited_at, status, classification,
+       document_type, mime_type, original_filename, deposited_at, retention_policy_id,
+       retention_policy_version, retention_expires_at, status, classification,
        confidentiality, personal_data_classification, correlation_id, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         archiveId, principal.tenantId, principal.legalEntityId, input.sourceSystem,
         input.sourceDocumentId, input.sourceDocumentNumber, input.documentType, input.mimeType,
-        input.originalFilename, depositedAt, input.classification, input.confidentiality,
+        input.originalFilename, depositedAt, retentionPolicy.id, retentionPolicy.version,
+        retentionExpiresAt, input.classification, input.confidentiality,
         input.personalDataClassification, input.correlationId, principal.applicationId,
         depositedAt, depositedAt,
       ),
@@ -140,7 +190,16 @@ export async function depositArchive(env: Env, principal: Principal, input: Depo
       depositorIdentity: principal.applicationId,
       tenantId: principal.tenantId,
       legalEntityId: principal.legalEntityId,
-      retentionPolicy: null,
+      retentionPolicy: {
+        id: retentionPolicy.id,
+        version: retentionPolicy.version,
+        jurisdiction: retentionPolicy.jurisdiction,
+        documentCategory: retentionPolicy.document_category,
+        startEvent: retentionPolicy.start_event,
+        durationMonths: retentionPolicy.duration_months,
+        legalBasis: retentionPolicy.legal_basis,
+        expiresAt: retentionExpiresAt,
+      },
       applicationVersion: env.APP_VERSION,
       evidenceSchemaVersion: env.EVIDENCE_SCHEMA_VERSION,
       correlationId: input.correlationId,
@@ -177,7 +236,16 @@ export async function depositArchive(env: Env, principal: Principal, input: Depo
       subjectId: archiveId,
       correlationId: input.correlationId,
       result: "success",
-      payload: { objectId, objectHash, manifestHash, length: input.bytes.byteLength, mimeType: input.mimeType },
+      payload: {
+        objectId,
+        objectHash,
+        manifestHash,
+        length: input.bytes.byteLength,
+        mimeType: input.mimeType,
+        retentionPolicyId: retentionPolicy.id,
+        retentionPolicyVersion: retentionPolicy.version,
+        retentionExpiresAt,
+      },
       sourceIp,
     });
     await env.DB.batch([

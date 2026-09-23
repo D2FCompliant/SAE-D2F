@@ -200,9 +200,3 @@ END;
 CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN
   SELECT RAISE(ABORT, 'audit events are append-only');
 END;
-
--- Local/test bootstrap only. Production provisioning must create isolated tenants and hashed credentials separately.
-INSERT INTO tenants (id, organisation_name, country, data_residency, status, created_at)
-VALUES ('tenant-demo', 'D2F Demo', 'FR', 'EU', 'active', '2026-09-23T00:00:00.000Z');
-INSERT INTO legal_entities (id, tenant_id, legal_name, country, status, created_at)
-VALUES ('legal-demo', 'tenant-demo', 'D2F Demo France', 'FR', 'active', '2026-09-23T00:00:00.000Z');
