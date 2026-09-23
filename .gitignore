@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+coverage/
+dist/
+*.log
+.DS_Store
+git-metadata/
+git-metadata-icloud-backup/
+git-pointer-backup
+gitignore-icloud-backup
