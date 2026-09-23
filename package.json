@@ -1,6 +1,6 @@
 {
   "name": "@d2f/evidence-archive",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "Independent electronic archiving system designed for evidential preservation.",
   "type": "module",

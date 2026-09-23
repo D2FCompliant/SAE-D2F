@@ -39,6 +39,7 @@ export async function listManagedTenants(env: Env): Promise<Record<string, unkno
       (SELECT COUNT(*) FROM api_credentials c WHERE c.tenant_id = t.id AND c.revoked_at IS NULL) AS active_credential_count
     FROM tenants t
     LEFT JOIN tenant_subscriptions s ON s.tenant_id = t.id
+    WHERE t.status <> 'closed'
     ORDER BY t.created_at DESC`).all<Record<string, unknown>>();
   return result.results;
 }
@@ -111,7 +112,7 @@ export async function issueTenantCredential(env: Env, operator: OperatorPrincipa
 }
 
 export async function setTenantStatus(env: Env, operator: OperatorPrincipal, tenantId: string, status: string, correlationId: string, sourceIp: string | null) {
-  if (!['active', 'suspended'].includes(status)) throw new ApiError(400, "INVALID_TENANT_STATUS", "Only active or suspended status is accepted.");
+  if (!['active', 'suspended', 'closed'].includes(status)) throw new ApiError(400, "INVALID_TENANT_STATUS", "Only active, suspended or closed status is accepted.");
   const legal = await env.DB.prepare("SELECT id FROM legal_entities WHERE tenant_id = ? ORDER BY created_at LIMIT 1").bind(tenantId).first<{ id: string }>();
   if (!legal) throw new ApiError(404, "TENANT_NOT_FOUND", "Tenant not found.");
   await env.DB.prepare("UPDATE tenants SET status = ? WHERE id = ?").bind(status, tenantId).run();

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3 — 2026-09-23
+
+### Fixed
+
+- Closed duplicate tenants disappear from the operator register while their immutable audit evidence remains available.
+
+Support: D2F-20260923-961248.
+Rollback: 0.3.2 / 775804c.
+
 ## 0.3.2 — 2026-09-23
 
 ### Fixed

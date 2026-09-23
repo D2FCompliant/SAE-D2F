@@ -80,7 +80,7 @@ describe("D2F compatibility contract", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "ok",
-      version: "0.3.2",
+      version: "0.3.3",
       commit: "development",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
@@ -266,6 +266,22 @@ describe("D2F operator control plane", () => {
     const response = await request("/api/v1/admin/tenants", { headers: { authorization: `Bearer ${DEMO_TOKEN}` } });
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ error: { code: "INVALID_OPERATOR_CREDENTIAL" } });
+  });
+
+  it("keeps closed duplicate tenants in the audit trail but out of the operator register", async () => {
+    await seedOperator();
+    const created = await (await request("/api/v1/admin/tenants", {
+      method: "POST", headers: { authorization: `Bearer ${OPERATOR_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ organisationName: "Duplicate", legalName: "Duplicate d.o.o.", country: "RS" }),
+    })).json<Record<string, string>>();
+    const closed = await request(`/api/v1/admin/tenants/${created.tenantId}/status`, {
+      method: "PATCH", headers: { authorization: `Bearer ${OPERATOR_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify({ status: "closed" }),
+    });
+    expect(closed.status).toBe(200);
+    const listed = await (await request("/api/v1/admin/tenants", { headers: { authorization: `Bearer ${OPERATOR_TOKEN}` } })).json<{ items: Record<string, unknown>[] }>();
+    expect(listed.items.some(item => item.id === created.tenantId)).toBe(false);
+    const audit = await env.DB.prepare("SELECT event_type FROM audit_events WHERE tenant_id = ? ORDER BY sequence DESC LIMIT 1").bind(created.tenantId).first<{ event_type: string }>();
+    expect(audit?.event_type).toBe("TENANT_STATUS_CHANGED");
   });
 });
 
