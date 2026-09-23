@@ -41,6 +41,18 @@ type ArchiveRow = {
   created_by: string;
 };
 
+export type ArchiveListFilters = {
+  page: number;
+  pageSize: number;
+  query: string | null;
+  status: string | null;
+};
+
+const ARCHIVE_STATUSES = new Set([
+  "RECEIVED", "VALIDATING", "VALIDATED", "SEALED", "PRESERVED", "UNDER_LEGAL_HOLD",
+  "RETENTION_EXPIRED", "DESTRUCTION_PENDING", "DESTROYED", "ERROR",
+]);
+
 function parseReceipt(value: string): Receipt {
   const parsed: unknown = JSON.parse(value);
   if (!parsed || typeof parsed !== "object") throw new ApiError(500, "INVALID_RECEIPT", "Stored idempotency receipt is invalid.");
@@ -203,6 +215,53 @@ export async function getArchive(env: Env, principal: Principal, archiveId: stri
     .bind(archiveId, principal.tenantId, principal.legalEntityId).first<ArchiveRow>();
   if (!row) throw new ApiError(404, "ARCHIVE_NOT_FOUND", "The archive was not found.");
   return row;
+}
+
+export async function listArchives(env: Env, principal: Principal, filters: ArchiveListFilters): Promise<Record<string, unknown>> {
+  const where = ["tenant_id = ?", "legal_entity_id = ?"];
+  const bindings: unknown[] = [principal.tenantId, principal.legalEntityId];
+  if (filters.status) {
+    if (!ARCHIVE_STATUSES.has(filters.status)) throw new ApiError(400, "INVALID_ARCHIVE_STATUS", "The requested archive status is invalid.");
+    where.push("status = ?");
+    bindings.push(filters.status);
+  }
+  if (filters.query) {
+    const escaped = filters.query.replace(/[\\%_]/g, "\\$&");
+    where.push("(source_document_number LIKE ? ESCAPE '\\' OR source_document_id LIKE ? ESCAPE '\\' OR original_filename LIKE ? ESCAPE '\\')");
+    const pattern = `%${escaped}%`;
+    bindings.push(pattern, pattern, pattern);
+  }
+  const whereSql = where.join(" AND ");
+  const count = await env.DB.prepare(`SELECT count(*) AS total FROM archives WHERE ${whereSql}`)
+    .bind(...bindings).first<{ total: number }>();
+  const summary = await env.DB.prepare(`SELECT count(*) AS total,
+      SUM(CASE WHEN status = 'PRESERVED' THEN 1 ELSE 0 END) AS preserved,
+      SUM(CASE WHEN legal_hold_count > 0 THEN 1 ELSE 0 END) AS legal_holds
+    FROM archives WHERE tenant_id = ? AND legal_entity_id = ?`)
+    .bind(principal.tenantId, principal.legalEntityId)
+    .first<{ total: number; preserved: number | null; legal_holds: number | null }>();
+  const offset = (filters.page - 1) * filters.pageSize;
+  const result = await env.DB.prepare(`SELECT id, source_system, source_document_id, source_document_number,
+      document_type, mime_type, original_filename, deposited_at, retention_expires_at,
+      legal_hold_count, status, classification, confidentiality, created_by
+    FROM archives WHERE ${whereSql}
+    ORDER BY deposited_at DESC, id DESC LIMIT ? OFFSET ?`)
+    .bind(...bindings, filters.pageSize, offset).all<Record<string, unknown>>();
+  const total = count?.total ?? 0;
+  return {
+    items: result.results,
+    summary: {
+      total: summary?.total ?? 0,
+      preserved: summary?.preserved ?? 0,
+      legalHolds: summary?.legal_holds ?? 0,
+    },
+    pagination: {
+      page: filters.page,
+      pageSize: filters.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / filters.pageSize)),
+    },
+  };
 }
 
 export async function listObjects(env: Env, principal: Principal, archiveId: string): Promise<readonly Record<string, unknown>[]> {

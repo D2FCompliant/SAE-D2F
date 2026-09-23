@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: D2F Evidence Archive API
-  version: 0.1.0
+  version: 0.2.0
   description: Electronic Archiving System designed for evidential preservation. No certification claim is made.
 servers:
   - url: /api/v1
@@ -15,6 +15,14 @@ paths:
       responses:
         '200': { description: Health and qualification posture }
   /archives:
+    get:
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 200 } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: Tenant and legal-entity scoped archive register }
     post:
       parameters:
         - name: Idempotency-Key
@@ -33,6 +41,10 @@ paths:
         '201': { description: Archive preserved }
         '200': { description: Idempotent replay }
         '409': { description: Idempotency conflict }
+  /session:
+    get:
+      responses:
+        '200': { description: Authenticated identity, derived profile, scopes and capabilities }
   /archives/{archiveId}:
     get:
       parameters: [{ $ref: '#/components/parameters/ArchiveId' }]

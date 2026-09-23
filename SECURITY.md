@@ -10,6 +10,8 @@
 - No document content is logged; error responses include correlation IDs.
 - Original objects, manifests, and audit entries have database-level no-update/no-delete triggers.
 - IDs use Web Crypto UUIDs and hashes use Web Crypto SHA-256.
+- The `/console` interface uses a restrictive Content Security Policy, keeps its credential only in session storage, and renders archive data as text.
+- Console buttons are capability-driven, while every action is independently re-authorized by the API.
 
 ## Required before production
 

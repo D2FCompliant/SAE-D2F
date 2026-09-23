@@ -2,7 +2,7 @@
 
 D2F Evidence Archive is an independent Electronic Archiving System designed for evidential preservation. It is not embedded in D2F Gestion or D2F Enterprise Platform, uses no shared database, and makes no certification or automatic legal-proof claim.
 
-Current release: `0.1.0` (foundation, not qualified for evidential production).
+Current release: `0.2.0` (document console, not qualified for evidential production).
 
 ## Implemented foundation
 
@@ -15,6 +15,9 @@ Current release: `0.1.0` (foundation, not qualified for evidential production).
 - Bearer and `x-api-key` authentication with hashed, revocable credentials;
 - idempotent deposit receipts;
 - integrity tests for altered, missing, and unchanged evidence.
+- responsive document-management console at `/console` with server-enforced, scope-based profiles;
+- tenant/legal-entity isolated document search, download, evidence, verification, legal hold, export and controlled destruction request;
+- compatibility for the D2F Gestion connector paths `/archives/{id}/verify` and `/archives/{id}/evidence`.
 
 The environment reports `evidentialProductionReady: false` until retention-locked storage and an external RFC 3161 timestamp provider are configured and verified.
 

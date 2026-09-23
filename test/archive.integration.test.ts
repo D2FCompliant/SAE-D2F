@@ -6,17 +6,18 @@ import { sha256 } from "../src/crypto";
 
 const DEMO_TOKEN = "d2f_test_demo_0123456789abcdefghijklmnopqrstuvwxyz";
 const OTHER_TOKEN = "d2f_test_other_0123456789abcdefghijklmnopqrstuvwxyz";
+const READ_ONLY_TOKEN = "d2f_test_readonly_0123456789abcdefghijklmnop";
 const scopes = JSON.stringify([
   "archives:write", "archives:read", "evidence:read", "evidence:verify",
   "archives:legal-hold", "archives:destruction-request", "archives:export", "jobs:read",
 ]);
 
-async function seedCredential(id: string, token: string, tenantId = "tenant-demo", legalEntityId = "legal-demo") {
+async function seedCredential(id: string, token: string, tenantId = "tenant-demo", legalEntityId = "legal-demo", credentialScopes = scopes) {
   await env.DB.prepare(`INSERT INTO api_credentials
     (id, tenant_id, legal_entity_id, application_id, environment, display_name, key_sha256,
      key_prefix, scopes_json, created_at)
     VALUES (?, ?, ?, 'test-client', 'test', 'Test credential', ?, 'd2f_test', ?, ?)`)
-    .bind(id, tenantId, legalEntityId, await sha256(token), scopes, new Date().toISOString()).run();
+    .bind(id, tenantId, legalEntityId, await sha256(token), credentialScopes, new Date().toISOString()).run();
 }
 
 function request(path: string, init: RequestInit = {}) {
@@ -50,7 +51,7 @@ describe("D2F compatibility contract", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "ok",
-      version: "0.1.0",
+      version: "0.2.0",
       storageImmutability: "application-only",
       evidentialProductionReady: false,
     });
@@ -79,6 +80,79 @@ describe("D2F compatibility contract", () => {
     expect(secondReceipt.archive_id).toBe(firstReceipt.archive_id);
     const count = await env.DB.prepare("SELECT count(*) AS total FROM archives").first<{ total: number }>();
     expect(count?.total).toBe(1);
+  });
+
+  it("supports the unversioned evidence and verification paths configured by D2F Gestion", async () => {
+    const receipt = await (await deposit()).json<Record<string, string>>();
+    const headers = { authorization: `Bearer ${DEMO_TOKEN}` };
+    const evidence = await request(`/archives/${receipt.archive_id}/evidence`, { headers });
+    expect(evidence.status).toBe(200);
+    expect(await evidence.json()).toMatchObject({ hash_algorithm: "SHA-256" });
+    const verification = await request(`/archives/${receipt.archive_id}/verify`, { method: "POST", headers });
+    expect(await verification.json()).toMatchObject({ valid: true, archiveId: receipt.archive_id });
+  });
+});
+
+describe("document console and profiles", () => {
+  it("serves the console with a restrictive browser security policy", async () => {
+    const response = await request("/console");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(response.headers.get("content-security-policy")).not.toContain("unsafe-inline");
+    expect(await response.text()).toContain("Documents archivés");
+  });
+
+  it("derives an administrator profile from enforced scopes", async () => {
+    const response = await request("/api/v1/session", { headers: { authorization: `Bearer ${DEMO_TOKEN}` } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      profile: "Administrateur SAE",
+      tenantId: "tenant-demo",
+      legalEntityId: "legal-demo",
+      capabilities: { read: true, deposit: true, legalHold: true, requestDestruction: true },
+    });
+  });
+
+  it("lists and filters only archives belonging to the credential legal entity", async () => {
+    await deposit("%PDF first", { "x-d2f-document-id": "invoice-filter-1", "x-d2f-document-number": "FACT-UNIQUE-42" });
+    await env.DB.prepare("INSERT INTO legal_entities (id, tenant_id, legal_name, country, status, created_at) VALUES ('legal-second','tenant-demo','Second entity','FR','active',?)")
+      .bind(new Date().toISOString()).run();
+    await seedCredential("credential-readonly", READ_ONLY_TOKEN, "tenant-demo", "legal-second", JSON.stringify(["archives:read"]));
+    const own = await request("/api/v1/archives?q=FACT-UNIQUE&status=PRESERVED", { headers: { authorization: `Bearer ${DEMO_TOKEN}` } });
+    expect(await own.json()).toMatchObject({
+      pagination: { total: 1 },
+      summary: { total: 1, preserved: 1, legalHolds: 0 },
+      items: [{ source_document_number: "FACT-UNIQUE-42" }],
+    });
+    const otherEntity = await request("/api/v1/archives", { headers: { authorization: `Bearer ${READ_ONLY_TOKEN}` } });
+    expect(await otherEntity.json()).toMatchObject({ pagination: { total: 0 }, items: [] });
+  });
+
+  it("keeps read-only profiles unable to mutate archives", async () => {
+    await seedCredential("credential-readonly", READ_ONLY_TOKEN, "tenant-demo", "legal-demo", JSON.stringify(["archives:read"]));
+    const session = await request("/api/v1/session", { headers: { authorization: `Bearer ${READ_ONLY_TOKEN}` } });
+    expect(await session.json()).toMatchObject({ profile: "Consultation", capabilities: { read: true, deposit: false, verify: false } });
+    const denied = await request("/api/v1/archives", {
+      method: "POST",
+      headers: { authorization: `Bearer ${READ_ONLY_TOKEN}`, "content-type": "application/pdf", "idempotency-key": "readonly-cannot-deposit-001" },
+      body: "%PDF",
+    });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: { code: "INSUFFICIENT_SCOPE" } });
+  });
+
+  it("isolates lifecycle jobs between legal entities in the same tenant", async () => {
+    const receipt = await (await deposit()).json<Record<string, string>>();
+    const exported = await request(`/api/v1/archives/${receipt.archive_id}/export`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${DEMO_TOKEN}` },
+    });
+    const job = await exported.json<Record<string, string>>();
+    await env.DB.prepare("INSERT INTO legal_entities (id, tenant_id, legal_name, country, status, created_at) VALUES ('legal-second','tenant-demo','Second entity','FR','active',?)")
+      .bind(new Date().toISOString()).run();
+    await seedCredential("credential-readonly", READ_ONLY_TOKEN, "tenant-demo", "legal-second", JSON.stringify(["archives:read", "jobs:read"]));
+    const denied = await request(`/api/v1/jobs/${job.jobId}`, { headers: { authorization: `Bearer ${READ_ONLY_TOKEN}` } });
+    expect(denied.status).toBe(404);
   });
 });
 

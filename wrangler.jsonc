@@ -7,7 +7,7 @@
   "workers_dev": true,
   "preview_urls": true,
   "vars": {
-    "APP_VERSION": "0.1.0",
+    "APP_VERSION": "0.2.0",
     "ENVIRONMENT": "local",
     "EVIDENCE_SCHEMA_VERSION": "1.0.0",
     "MAX_ARCHIVE_BYTES": "20971520",
@@ -37,7 +37,7 @@
     "test": {
       "name": "d2f-evidence-archive-test",
       "vars": {
-        "APP_VERSION": "0.1.0",
+        "APP_VERSION": "0.2.0",
         "ENVIRONMENT": "test",
         "EVIDENCE_SCHEMA_VERSION": "1.0.0",
         "MAX_ARCHIVE_BYTES": "20971520",

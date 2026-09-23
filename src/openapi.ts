@@ -2,7 +2,7 @@ export const OPENAPI = {
   openapi: "3.1.0",
   info: {
     title: "D2F Evidence Archive API",
-    version: "0.1.0",
+    version: "0.2.0",
     description: "Electronic Archiving System designed for evidential preservation. No certification claim is made.",
   },
   servers: [{ url: "/api/v1" }],
@@ -10,6 +10,16 @@ export const OPENAPI = {
   paths: {
     "/health": { get: { operationId: "getHealth", security: [], responses: { "200": { description: "Service health and qualification posture" } } } },
     "/archives": {
+      get: {
+        operationId: "listArchives",
+        parameters: [
+          { name: "q", in: "query", required: false, schema: { type: "string", maxLength: 200 } },
+          { name: "status", in: "query", required: false, schema: { type: "string" } },
+          { name: "page", in: "query", required: false, schema: { type: "integer", minimum: 1 } },
+          { name: "pageSize", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100 } },
+        ],
+        responses: { "200": { description: "Tenant and legal-entity scoped archive register" } },
+      },
       post: {
         operationId: "depositArchive",
         parameters: [
@@ -28,6 +38,7 @@ export const OPENAPI = {
         responses: { "201": { description: "Archive preserved", content: { "application/json": { schema: { $ref: "#/components/schemas/Receipt" } } } }, "200": { description: "Idempotent replay" }, "409": { description: "Idempotency conflict" } },
       },
     },
+    "/session": { get: { operationId: "getSession", responses: { "200": { description: "Authenticated profile and capabilities" } } } },
     "/archives/{archiveId}": { get: { operationId: "getArchive", parameters: [{ $ref: "#/components/parameters/ArchiveId" }], responses: { "200": { description: "Archive metadata" }, "404": { description: "Not found" } } } },
     "/archives/{archiveId}/status": { get: { operationId: "getArchiveStatus", parameters: [{ $ref: "#/components/parameters/ArchiveId" }], responses: { "200": { description: "Archive status" } } } },
     "/archives/{archiveId}/metadata": { get: { operationId: "getArchiveMetadata", parameters: [{ $ref: "#/components/parameters/ArchiveId" }], responses: { "200": { description: "Archive metadata" } } } },

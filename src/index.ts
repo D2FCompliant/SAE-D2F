@@ -1,12 +1,19 @@
-import { depositArchive, getArchive, getEvidence, getObject, listObjects, verifyArchive } from "./archive-service";
-import { authenticate } from "./auth";
+import { depositArchive, getArchive, getEvidence, getObject, listArchives, listObjects, verifyArchive } from "./archive-service";
+import { authenticate, describePrincipal } from "./auth";
+import { consoleResponse } from "./console";
 import { correlationId, errorResponse, json, parseDeposit, parseSmallJson, sourceIp } from "./http";
 import { applyLegalHold, getJob, releaseLegalHold, requestDestruction, requestExport } from "./lifecycle-service";
 import { OPENAPI } from "./openapi";
 
 function archiveMatch(pathname: string): { archiveId: string; suffix: string } | null {
-  const match = /^\/api\/v1\/archives\/([^/]+)(\/.*)?$/.exec(pathname);
+  const match = /^(?:\/api\/v1)?\/archives\/([^/]+)(\/.*)?$/.exec(pathname);
   return match?.[1] ? { archiveId: decodeURIComponent(match[1]), suffix: match[2] ?? "" } : null;
+}
+
+function positiveInteger(value: string | null, fallback: number, maximum: number): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
 }
 
 async function route(request: Request, env: Env): Promise<Response> {
@@ -14,6 +21,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   const requestCorrelationId = correlationId(request);
   const responseHeaders = { "x-correlation-id": requestCorrelationId };
   try {
+    const consoleAsset = consoleResponse(url.pathname);
+    if (request.method === "GET" && consoleAsset) return consoleAsset;
     if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/v1/health")) {
       return json({
         status: "ok",
@@ -26,6 +35,19 @@ async function route(request: Request, env: Env): Promise<Response> {
       }, 200, responseHeaders);
     }
     if (request.method === "GET" && url.pathname === "/api/v1/openapi.json") return json(OPENAPI, 200, responseHeaders);
+    if (request.method === "GET" && url.pathname === "/api/v1/session") {
+      const principal = await authenticate(request, env, "archives:read");
+      return json(describePrincipal(principal), 200, responseHeaders);
+    }
+    if (request.method === "GET" && (url.pathname === "/archives" || url.pathname === "/api/v1/archives")) {
+      const principal = await authenticate(request, env, "archives:read");
+      return json(await listArchives(env, principal, {
+        page: positiveInteger(url.searchParams.get("page"), 1, 10_000),
+        pageSize: positiveInteger(url.searchParams.get("pageSize"), 25, 100),
+        query: url.searchParams.get("q")?.trim().slice(0, 200) || null,
+        status: url.searchParams.get("status")?.trim() || null,
+      }), 200, responseHeaders);
+    }
     if (request.method === "POST" && (url.pathname === "/archives" || url.pathname === "/api/v1/archives")) {
       const principal = await authenticate(request, env, "archives:write");
       const compatibility = url.pathname === "/archives";

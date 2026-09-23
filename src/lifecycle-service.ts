@@ -129,8 +129,12 @@ export async function requestExport(env: Env, principal: Principal, archiveId: s
 }
 
 export async function getJob(env: Env, principal: Principal, jobId: string): Promise<Record<string, unknown>> {
-  const job = await env.DB.prepare("SELECT id, archive_id, job_type, status, result_json, error_message, created_at, updated_at FROM jobs WHERE id = ? AND tenant_id = ?")
-    .bind(jobId, principal.tenantId).first<Record<string, unknown>>();
+  const job = await env.DB.prepare(`SELECT j.id, j.archive_id, j.job_type, j.status, j.result_json,
+      j.error_message, j.created_at, j.updated_at
+    FROM jobs j
+    LEFT JOIN archives a ON a.id = j.archive_id AND a.tenant_id = j.tenant_id
+    WHERE j.id = ? AND j.tenant_id = ? AND (j.archive_id IS NULL OR a.legal_entity_id = ?)`)
+    .bind(jobId, principal.tenantId, principal.legalEntityId).first<Record<string, unknown>>();
   if (!job) throw new ApiError(404, "JOB_NOT_FOUND", "The job was not found.");
   return job;
 }

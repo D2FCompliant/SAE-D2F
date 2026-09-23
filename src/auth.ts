@@ -19,7 +19,7 @@ function extractCredential(request: Request): string {
   return request.headers.get("x-api-key")?.trim() ?? "";
 }
 
-export async function authenticate(request: Request, env: Env, requiredScope: string): Promise<Principal> {
+export async function authenticate(request: Request, env: Env, requiredScope?: string): Promise<Principal> {
   const credential = extractCredential(request);
   if (credential.length < 24) throw new ApiError(401, "AUTHENTICATION_REQUIRED", "A valid Bearer token or x-api-key is required.");
   const row = await env.DB.prepare(`
@@ -41,8 +41,32 @@ export async function authenticate(request: Request, env: Env, requiredScope: st
   } catch {
     throw new ApiError(500, "INVALID_CREDENTIAL_CONFIGURATION", "The API credential scope configuration is invalid.");
   }
-  if (!scopes.includes(requiredScope)) throw new ApiError(403, "INSUFFICIENT_SCOPE", `The credential requires the ${requiredScope} scope.`);
+  if (requiredScope && !scopes.includes(requiredScope)) throw new ApiError(403, "INSUFFICIENT_SCOPE", `The credential requires the ${requiredScope} scope.`);
   if (!row.legal_entity_id) throw new ApiError(403, "LEGAL_ENTITY_REQUIRED", "The credential is not scoped to a legal entity.");
   await env.DB.prepare("UPDATE api_credentials SET last_used_at = ? WHERE id = ?").bind(new Date().toISOString(), row.id).run();
   return { credentialId: row.id, tenantId: row.tenant_id, legalEntityId: row.legal_entity_id, applicationId: row.application_id, scopes };
+}
+
+export function describePrincipal(principal: Principal): Record<string, unknown> {
+  const has = (scope: string) => principal.scopes.includes(scope);
+  let profile = "Consultation";
+  if (has("archives:write")) profile = "Archiviste";
+  if (has("archives:legal-hold")) profile = "Juridique & conformité";
+  if (has("archives:write") && has("archives:legal-hold") && has("archives:destruction-request")) profile = "Administrateur SAE";
+  return {
+    applicationId: principal.applicationId,
+    tenantId: principal.tenantId,
+    legalEntityId: principal.legalEntityId,
+    profile,
+    scopes: principal.scopes,
+    capabilities: {
+      read: has("archives:read"),
+      deposit: has("archives:write"),
+      readEvidence: has("evidence:read"),
+      verify: has("evidence:verify"),
+      legalHold: has("archives:legal-hold"),
+      export: has("archives:export"),
+      requestDestruction: has("archives:destruction-request"),
+    },
+  };
 }
